@@ -5,8 +5,9 @@ A Rust library for generating CLIP embeddings from images and text using the Can
 ## Features
 
 - **Easy-to-use API**: Simple struct-based interface with `new()` constructor and embedding methods
-- **Image embeddings**: Generate 512-dimensional embeddings from image files
+- **Image embeddings**: Generate 512-dimensional embeddings from image files, DynamicImages, or raw bytes
 - **Text embeddings**: Generate 512-dimensional embeddings from text strings
+- **Batch processing**: Process multiple images efficiently in a single call
 - **GPU acceleration**: Automatic Metal (macOS) or CUDA support with CPU fallback
 - **Model management**: Automatic download and caching of CLIP models from HuggingFace
 
@@ -109,6 +110,47 @@ Generates a 512-dimensional embedding vector for a text string.
 
 **Returns:** `Vec<f32>` with 512 elements representing the text embedding.
 
+### Batch Processing Methods
+
+##### `get_image_embeddings()`
+
+```rust
+fn get_image_embeddings(&self, image_paths: &[String]) -> Result<Vec<Vec<f32>>>
+```
+
+Generates 512-dimensional embedding vectors for multiple image files efficiently.
+
+**Parameters:**
+- `image_paths`: Slice of image file paths
+
+**Returns:** `Vec<Vec<f32>>` where each inner vector contains 512 elements. Order matches input.
+
+##### `get_image_embeddings_from_dynamic()`
+
+```rust
+fn get_image_embeddings_from_dynamic(&self, images: Vec<image::DynamicImage>) -> Result<Vec<Vec<f32>>>
+```
+
+Generates 512-dimensional embedding vectors for multiple `DynamicImage` instances.
+
+**Parameters:**
+- `images`: Vector of `DynamicImage` instances
+
+**Returns:** `Vec<Vec<f32>>` where each inner vector contains 512 elements. Order matches input.
+
+##### `get_image_embeddings_from_bytes()`
+
+```rust
+fn get_image_embeddings_from_bytes(&self, image_bytes_list: &[&[u8]]) -> Result<Vec<Vec<f32>>>
+```
+
+Generates 512-dimensional embedding vectors for multiple images from raw bytes.
+
+**Parameters:**
+- `image_bytes_list`: Slice of byte slices, each containing raw image data
+
+**Returns:** `Vec<Vec<f32>>` where each inner vector contains 512 elements. Order matches input.
+
 ## Example: Computing Similarity
 
 ```rust
@@ -141,7 +183,40 @@ fn main() -> Result<()> {
 }
 ```
 
-## Example: Different Input Methods
+## Example: Batch Processing
+
+```rust
+use anyhow::Result;
+use clipper::ClipEmbedder;
+
+fn main() -> Result<()> {
+    let embedder = ClipEmbedder::new(None, None, false)?;
+    
+    // Process multiple images at once (more efficient than individual calls)
+    let image_paths = vec![
+        "assets/cat1.jpg".to_string(),
+        "assets/cat2.jpg".to_string(),
+        "assets/dog1.jpg".to_string(),
+    ];
+    
+    let batch_embeddings = embedder.get_image_embeddings(&image_paths)?;
+    println!("Processed {} images", batch_embeddings.len());
+    
+    // Each embedding is 512 dimensions
+    for (i, embedding) in batch_embeddings.iter().enumerate() {
+        println!("Image {}: {} dimensions", i + 1, embedding.len());
+    }
+    
+    // Also works with DynamicImages and raw bytes
+    let dynamic_images = vec![
+        image::open("assets/image1.jpg")?,
+        image::open("assets/image2.jpg")?,
+    ];
+    let dynamic_batch = embedder.get_image_embeddings_from_dynamic(dynamic_images)?;
+    
+    Ok(())
+}
+```
 
 ```rust
 use anyhow::Result;

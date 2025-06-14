@@ -69,6 +69,23 @@ fn main() -> Result<()> {
     }
     println!();
 
+    // Test batch processing
+    if vec_imgs.len() > 1 {
+        println!("📸📸 Testing batch image processing...");
+        let batch_embeddings = embedder.get_image_embeddings(&vec_imgs)?;
+        println!("   Batch processed {} images", batch_embeddings.len());
+        
+        // Compare batch vs individual
+        let individual_embedding = embedder.get_image_embedding(&vec_imgs[0])?;
+        let batch_similarity = cosine_similarity(&batch_embeddings[0], &individual_embedding);
+        println!("   Batch vs individual consistency: {:.6}", batch_similarity);
+        
+        if batch_similarity > 0.999 {
+            println!("   ✅ Batch processing produces identical results!");
+        }
+        println!();
+    }
+
     // Test text embedding
     println!("📝 Testing text embeddings...");
     let text_sequences = match args.sequences {
@@ -110,6 +127,7 @@ fn main() -> Result<()> {
 
     println!("\n🎉 Library demonstration complete!");
     println!("✅ All input methods (file path, DynamicImage, raw bytes) working correctly!");
+    println!("✅ Both single and batch processing modes available!");
 
     Ok(())
 }

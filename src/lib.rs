@@ -1,6 +1,6 @@
 use anyhow::Result;
-use candle_core::{DType, Device, Tensor};
 use candle_core::utils::{cuda_is_available, metal_is_available};
+use candle_core::{DType, Device, Tensor};
 use candle_nn::VarBuilder;
 use candle_transformers::models::clip;
 use tokenizers::Tokenizer;
@@ -15,14 +15,18 @@ pub struct ClipEmbedder {
 
 impl ClipEmbedder {
     /// Create a new ClipEmbedder instance
-    /// 
+    ///
     /// # Arguments
     /// * `model_path` - Optional path to the model file. If None, downloads from HuggingFace
     /// * `tokenizer_path` - Optional path to the tokenizer file. If None, downloads from HuggingFace
     /// * `use_cpu` - Whether to force CPU usage instead of GPU
-    pub fn new(model_path: Option<String>, tokenizer_path: Option<String>, use_cpu: bool) -> Result<Self> {
+    pub fn new(
+        model_path: Option<String>,
+        tokenizer_path: Option<String>,
+        use_cpu: bool,
+    ) -> Result<Self> {
         let device = get_device(use_cpu)?;
-        
+
         let model_file = match model_path {
             None => {
                 let api = hf_hub::api::sync::Api::new()?;
@@ -35,15 +39,14 @@ impl ClipEmbedder {
             }
             Some(model) => model.into(),
         };
-        
+
         let tokenizer = get_tokenizer(tokenizer_path)?;
         let config = clip::ClipConfig::vit_base_patch32();
-        
-        let vb = unsafe { 
-            VarBuilder::from_mmaped_safetensors(&[model_file], DType::F32, &device)? 
-        };
+
+        let vb =
+            unsafe { VarBuilder::from_mmaped_safetensors(&[model_file], DType::F32, &device)? };
         let model = clip::ClipModel::new(vb, &config)?;
-        
+
         Ok(ClipEmbedder {
             model,
             tokenizer,
@@ -51,12 +54,12 @@ impl ClipEmbedder {
             device,
         })
     }
-    
+
     /// Generate a 512-dimensional embedding for an image
-    /// 
+    ///
     /// # Arguments
     /// * `image_path` - Path to the image file
-    /// 
+    ///
     /// # Returns
     /// A vector of 512 floating point values representing the image embedding
     pub fn get_image_embedding(&self, image_path: &str) -> Result<Vec<f32>> {
@@ -66,31 +69,33 @@ impl ClipEmbedder {
         let embedding = image_features.squeeze(0)?.to_vec1::<f32>()?;
         Ok(embedding)
     }
-    
+
     /// Generate a 512-dimensional embedding for a text string
-    /// 
+    ///
     /// # Arguments
     /// * `text` - The text string to encode
-    /// 
+    ///
     /// # Returns
     /// A vector of 512 floating point values representing the text embedding
     pub fn get_text_embedding(&self, text: &str) -> Result<Vec<f32>> {
-        let encoding = self.tokenizer.encode(text, true)
+        let encoding = self
+            .tokenizer
+            .encode(text, true)
             .map_err(anyhow::Error::msg)?;
         let tokens = encoding.get_ids().to_vec();
-        
+
         // Create input tensor with batch dimension
         let input_ids = Tensor::new(vec![tokens], &self.device)?;
         let text_features = self.model.get_text_features(&input_ids)?;
         let embedding = text_features.squeeze(0)?.to_vec1::<f32>()?;
         Ok(embedding)
     }
-    
+
     /// Generate a 512-dimensional embedding for an image from a DynamicImage
-    /// 
+    ///
     /// # Arguments
     /// * `image` - A DynamicImage from the image crate
-    /// 
+    ///
     /// # Returns
     /// A vector of 512 floating point values representing the image embedding
     pub fn get_image_embedding_from_dynamic(&self, image: image::DynamicImage) -> Result<Vec<f32>> {
@@ -100,12 +105,85 @@ impl ClipEmbedder {
         let embedding = image_features.squeeze(0)?.to_vec1::<f32>()?;
         Ok(embedding)
     }
-    
+
+    /// Generate 512-dimensional embeddings for multiple images from file paths
+    ///
+    /// # Arguments
+    /// * `image_paths` - Vector of paths to image files
+    ///
+    /// # Returns
+    /// A vector of vectors, where each inner vector contains 512 floating point values
+    /// representing the image embedding. The order matches the input image paths.
+    pub fn get_image_embeddings(&self, image_paths: &[String]) -> Result<Vec<Vec<f32>>> {
+        let images = load_images(image_paths, self.config.image_size)?.to_device(&self.device)?;
+        let image_features = self.model.get_image_features(&images)?;
+        
+        let mut embeddings = Vec::new();
+        for i in 0..image_paths.len() {
+            let embedding = image_features.get(i)?.to_vec1::<f32>()?;
+            embeddings.push(embedding);
+        }
+        Ok(embeddings)
+    }
+
+    /// Generate 512-dimensional embeddings for multiple DynamicImages
+    ///
+    /// # Arguments
+    /// * `images` - Vector of DynamicImage instances from the image crate
+    ///
+    /// # Returns
+    /// A vector of vectors, where each inner vector contains 512 floating point values
+    /// representing the image embedding. The order matches the input images.
+    pub fn get_image_embeddings_from_dynamic(&self, images: Vec<image::DynamicImage>) -> Result<Vec<Vec<f32>>> {
+        let mut tensors = Vec::new();
+        for img in images {
+            let tensor = preprocess_dynamic_image(img, self.config.image_size)?;
+            tensors.push(tensor);
+        }
+        let batch_tensor = Tensor::stack(&tensors, 0)?.to_device(&self.device)?;
+        let image_features = self.model.get_image_features(&batch_tensor)?;
+        
+        let mut embeddings = Vec::new();
+        for i in 0..tensors.len() {
+            let embedding = image_features.get(i)?.to_vec1::<f32>()?;
+            embeddings.push(embedding);
+        }
+        Ok(embeddings)
+    }
+
+    /// Generate 512-dimensional embeddings for multiple images from raw bytes
+    ///
+    /// # Arguments
+    /// * `image_bytes_list` - Vector of byte slices, each containing raw image data
+    ///
+    /// # Returns
+    /// A vector of vectors, where each inner vector contains 512 floating point values
+    /// representing the image embedding. The order matches the input byte arrays.
+    pub fn get_image_embeddings_from_bytes(&self, image_bytes_list: &[&[u8]]) -> Result<Vec<Vec<f32>>> {
+        let mut tensors = Vec::new();
+        for image_bytes in image_bytes_list {
+            let img = image::ImageReader::new(std::io::Cursor::new(image_bytes))
+                .with_guessed_format()?
+                .decode()?;
+            let tensor = preprocess_dynamic_image(img, self.config.image_size)?;
+            tensors.push(tensor);
+        }
+        let batch_tensor = Tensor::stack(&tensors, 0)?.to_device(&self.device)?;
+        let image_features = self.model.get_image_features(&batch_tensor)?;
+        
+        let mut embeddings = Vec::new();
+        for i in 0..tensors.len() {
+            let embedding = image_features.get(i)?.to_vec1::<f32>()?;
+            embeddings.push(embedding);
+        }
+        Ok(embeddings)
+    }
+
     /// Generate a 512-dimensional embedding for an image from raw bytes
-    /// 
+    ///
     /// # Arguments
     /// * `image_bytes` - Raw bytes of an image file (PNG, JPEG, etc.)
-    /// 
+    ///
     /// # Returns
     /// A vector of 512 floating point values representing the image embedding
     pub fn get_image_embedding_from_bytes(&self, image_bytes: &[u8]) -> Result<Vec<f32>> {
@@ -177,4 +255,14 @@ fn get_tokenizer(tokenizer: Option<String>) -> Result<Tokenizer> {
         Some(file) => file.into(),
     };
     Tokenizer::from_file(tokenizer_file).map_err(anyhow::Error::msg)
+}
+
+fn load_images<T: AsRef<std::path::Path>>(paths: &[T], image_size: usize) -> Result<Tensor> {
+    let mut images = vec![];
+    for path in paths {
+        let tensor = load_image(path, image_size)?;
+        images.push(tensor);
+    }
+    let images = Tensor::stack(&images, 0)?;
+    Ok(images)
 }
