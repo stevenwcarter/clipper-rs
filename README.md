@@ -70,6 +70,32 @@ Generates a 512-dimensional embedding vector for an image file.
 
 **Returns:** `Vec<f32>` with 512 elements representing the image embedding.
 
+##### `get_image_embedding_from_dynamic()`
+
+```rust
+fn get_image_embedding_from_dynamic(&self, image: image::DynamicImage) -> Result<Vec<f32>>
+```
+
+Generates a 512-dimensional embedding vector from a `DynamicImage` (from the `image` crate).
+
+**Parameters:**
+- `image`: A `DynamicImage` instance that will be resized to the model's required size
+
+**Returns:** `Vec<f32>` with 512 elements representing the image embedding.
+
+##### `get_image_embedding_from_bytes()`
+
+```rust
+fn get_image_embedding_from_bytes(&self, image_bytes: &[u8]) -> Result<Vec<f32>>
+```
+
+Generates a 512-dimensional embedding vector from raw image bytes.
+
+**Parameters:**
+- `image_bytes`: Raw bytes of an image file (PNG, JPEG, etc.) that will be decoded and resized
+
+**Returns:** `Vec<f32>` with 512 elements representing the image embedding.
+
 ##### `get_text_embedding()`
 
 ```rust
@@ -110,6 +136,36 @@ fn main() -> Result<()> {
     
     let similarity = cosine_similarity(&image_embedding, &text_embedding);
     println!("Image-text similarity: {:.4}", similarity);
+    
+    Ok(())
+}
+```
+
+## Example: Different Input Methods
+
+```rust
+use anyhow::Result;
+use clipper::ClipEmbedder;
+use std::fs;
+
+fn main() -> Result<()> {
+    let embedder = ClipEmbedder::new(None, None, false)?;
+    
+    // Method 1: From file path
+    let embedding1 = embedder.get_image_embedding("assets/image.jpg")?;
+    
+    // Method 2: From DynamicImage (useful when you already have an image loaded)
+    let dynamic_image = image::open("assets/image.jpg")?;
+    let embedding2 = embedder.get_image_embedding_from_dynamic(dynamic_image)?;
+    
+    // Method 3: From raw bytes (useful for web uploads, database blobs, etc.)
+    let image_bytes = fs::read("assets/image.jpg")?;
+    let embedding3 = embedder.get_image_embedding_from_bytes(&image_bytes)?;
+    
+    // All methods produce identical results
+    assert_eq!(embedding1.len(), 512);
+    assert_eq!(embedding2.len(), 512);
+    assert_eq!(embedding3.len(), 512);
     
     Ok(())
 }

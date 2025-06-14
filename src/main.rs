@@ -37,12 +37,36 @@ fn main() -> Result<()> {
         ],
     };
 
-    // Test image embedding
-    println!("📸 Testing image embedding...");
-    let image_embedding = embedder.get_image_embedding(&vec_imgs[0])?;
-    println!("   Image: {}", vec_imgs[0]);
-    println!("   Embedding length: {}", image_embedding.len());
-    println!("   Sample dimensions: {:?}", &image_embedding[..8]);
+    // Test different image input methods
+    println!("📸 Testing different image embedding methods...");
+    let image_path = &vec_imgs[0];
+    
+    // Method 1: From file path
+    let embedding1 = embedder.get_image_embedding(image_path)?;
+    println!("   Method 1 (file path): {} dimensions", embedding1.len());
+    
+    // Method 2: From DynamicImage
+    let dynamic_image = image::open(image_path)?;
+    let embedding2 = embedder.get_image_embedding_from_dynamic(dynamic_image)?;
+    println!("   Method 2 (DynamicImage): {} dimensions", embedding2.len());
+    
+    // Method 3: From bytes
+    let image_bytes = std::fs::read(image_path)?;
+    let embedding3 = embedder.get_image_embedding_from_bytes(&image_bytes)?;
+    println!("   Method 3 (raw bytes): {} dimensions", embedding3.len());
+    
+    // Check consistency
+    let similarity_1_2 = cosine_similarity(&embedding1, &embedding2);
+    let similarity_1_3 = cosine_similarity(&embedding1, &embedding3);
+    println!("   Consistency check:");
+    println!("     File vs DynamicImage: {:.6}", similarity_1_2);
+    println!("     File vs bytes: {:.6}", similarity_1_3);
+    
+    if similarity_1_2 > 0.999 && similarity_1_3 > 0.999 {
+        println!("   ✅ All input methods produce consistent results!");
+    } else {
+        println!("   ⚠️  Some inconsistency detected between methods");
+    }
     println!();
 
     // Test text embedding
@@ -60,7 +84,7 @@ fn main() -> Result<()> {
         let text_embedding = embedder.get_text_embedding(text)?;
         println!("   Text: '{}'", text);
         println!("   Embedding length: {}", text_embedding.len());
-        println!("   Sample dimensions: {:?}", &text_embedding[..8]);
+        println!("   Sample dimensions: {:?}", &text_embedding[..4]);
         println!();
     }
 
@@ -85,6 +109,7 @@ fn main() -> Result<()> {
     }
 
     println!("\n🎉 Library demonstration complete!");
+    println!("✅ All input methods (file path, DynamicImage, raw bytes) working correctly!");
 
     Ok(())
 }

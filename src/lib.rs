@@ -85,6 +85,39 @@ impl ClipEmbedder {
         let embedding = text_features.squeeze(0)?.to_vec1::<f32>()?;
         Ok(embedding)
     }
+    
+    /// Generate a 512-dimensional embedding for an image from a DynamicImage
+    /// 
+    /// # Arguments
+    /// * `image` - A DynamicImage from the image crate
+    /// 
+    /// # Returns
+    /// A vector of 512 floating point values representing the image embedding
+    pub fn get_image_embedding_from_dynamic(&self, image: image::DynamicImage) -> Result<Vec<f32>> {
+        let img = preprocess_dynamic_image(image, self.config.image_size)?;
+        let img = img.unsqueeze(0)?.to_device(&self.device)?;
+        let image_features = self.model.get_image_features(&img)?;
+        let embedding = image_features.squeeze(0)?.to_vec1::<f32>()?;
+        Ok(embedding)
+    }
+    
+    /// Generate a 512-dimensional embedding for an image from raw bytes
+    /// 
+    /// # Arguments
+    /// * `image_bytes` - Raw bytes of an image file (PNG, JPEG, etc.)
+    /// 
+    /// # Returns
+    /// A vector of 512 floating point values representing the image embedding
+    pub fn get_image_embedding_from_bytes(&self, image_bytes: &[u8]) -> Result<Vec<f32>> {
+        let img = image::ImageReader::new(std::io::Cursor::new(image_bytes))
+            .with_guessed_format()?
+            .decode()?;
+        let img = preprocess_dynamic_image(img, self.config.image_size)?;
+        let img = img.unsqueeze(0)?.to_device(&self.device)?;
+        let image_features = self.model.get_image_features(&img)?;
+        let embedding = image_features.squeeze(0)?.to_vec1::<f32>()?;
+        Ok(embedding)
+    }
 }
 
 fn get_device(cpu: bool) -> Result<Device> {
@@ -111,6 +144,10 @@ fn get_device(cpu: bool) -> Result<Device> {
 
 fn load_image<T: AsRef<std::path::Path>>(path: T, image_size: usize) -> Result<Tensor> {
     let img = image::ImageReader::open(path)?.decode()?;
+    preprocess_dynamic_image(img, image_size)
+}
+
+fn preprocess_dynamic_image(img: image::DynamicImage, image_size: usize) -> Result<Tensor> {
     let (height, width) = (image_size, image_size);
     let img = img.resize_to_fill(
         width as u32,
