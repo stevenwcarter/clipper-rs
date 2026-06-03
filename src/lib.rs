@@ -1,11 +1,14 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use candle_core::utils::{cuda_is_available, metal_is_available};
 use candle_core::{DType, Device, Tensor};
 use candle_nn::VarBuilder;
 use tokenizers::Tokenizer;
 
-#[allow(unused)]
+mod catalog;
+#[allow(dead_code)] // vendored upstream candle CLIP code; keep the full API surface
 mod clip;
+
+pub use catalog::{ModelInfo, supported_models};
 
 /// A CLIP model wrapper that provides easy access to image and text embeddings
 pub struct ClipEmbedder {
@@ -13,6 +16,8 @@ pub struct ClipEmbedder {
     tokenizer: Tokenizer,
     config: clip::ClipConfig,
     device: Device,
+    model_name: String,
+    dim: usize,
 }
 
 impl ClipEmbedder {
@@ -27,26 +32,68 @@ impl ClipEmbedder {
         tokenizer_path: Option<String>,
         use_cpu: bool,
     ) -> Result<Self> {
+        if model_path.is_none() && tokenizer_path.is_none() {
+            return Self::from_model(crate::catalog::DEFAULT_MODEL, use_cpu);
+        }
         let device = get_device(use_cpu)?;
-
-        let model_file = match model_path {
+        let model_file: std::path::PathBuf = match model_path {
             None => {
+                let spec = crate::catalog::find_spec(crate::catalog::DEFAULT_MODEL)
+                    .context("default model missing from catalog")?;
                 let api = hf_hub::api::sync::Api::new()?;
                 let api = api.repo(hf_hub::Repo::with_revision(
-                    "openai/clip-vit-base-patch32".to_string(),
+                    spec.hf_repo.to_string(),
                     hf_hub::RepoType::Model,
-                    "refs/pr/15".to_string(),
+                    spec.revision.to_string(),
                 ));
-                api.get("model.safetensors")?
+                api.get(spec.weights_file)?
             }
             Some(model) => model.into(),
         };
-
         let tokenizer = get_tokenizer(tokenizer_path)?;
         let config = clip::ClipConfig::vit_base_patch32();
-
+        let dim = config.text_config.projection_dim;
         let vb =
             unsafe { VarBuilder::from_mmaped_safetensors(&[model_file], DType::F32, &device)? };
+        let model = clip::ClipModel::new(vb, &config)?;
+        Ok(ClipEmbedder {
+            model,
+            tokenizer,
+            config,
+            device,
+            model_name: crate::catalog::DEFAULT_MODEL.to_string(),
+            dim,
+        })
+    }
+
+    /// Load a model from clipper's catalog by name, downloading weights and
+    /// tokenizer from HuggingFace (cached) on first use.
+    pub fn from_model(name: &str, use_cpu: bool) -> Result<Self> {
+        let spec = crate::catalog::find_spec(name).with_context(|| {
+            let known: Vec<_> =
+                crate::catalog::supported_models().into_iter().map(|m| m.name).collect();
+            format!("unknown model '{name}'; supported models: {known:?}")
+        })?;
+        let device = get_device(use_cpu)?;
+
+        let api = hf_hub::api::sync::Api::new()?;
+        let repo = api.repo(hf_hub::Repo::with_revision(
+            spec.hf_repo.to_string(),
+            hf_hub::RepoType::Model,
+            spec.revision.to_string(),
+        ));
+        let model_file = repo
+            .get(spec.weights_file)
+            .with_context(|| format!("download {} weights", spec.name))?;
+        let tokenizer_file = repo
+            .get(spec.tokenizer_file)
+            .with_context(|| format!("download {} tokenizer", spec.name))?;
+        let tokenizer = Tokenizer::from_file(tokenizer_file).map_err(anyhow::Error::msg)?;
+
+        let config = (spec.config)();
+        let vb = unsafe {
+            VarBuilder::from_mmaped_safetensors(&[model_file], DType::F32, &device)?
+        };
         let model = clip::ClipModel::new(vb, &config)?;
 
         Ok(ClipEmbedder {
@@ -54,7 +101,19 @@ impl ClipEmbedder {
             tokenizer,
             config,
             device,
+            model_name: spec.name.to_string(),
+            dim: spec.dim,
         })
+    }
+
+    /// The catalog name of the loaded model.
+    pub fn model_name(&self) -> &str {
+        &self.model_name
+    }
+
+    /// The embedding dimension of the loaded model.
+    pub fn dim(&self) -> usize {
+        self.dim
     }
 
     /// Generate a 512-dimensional embedding for an image

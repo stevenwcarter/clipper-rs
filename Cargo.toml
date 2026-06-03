@@ -5,15 +5,8 @@ edition = "2024"
 
 [dependencies]
 anyhow = { version = "1.0.98", features = ["backtrace"] }
-candle-core = { git = "https://github.com/huggingface/candle.git", version = "0.9.1", features = [
-  "metal",
-] }
-candle-nn = { git = "https://github.com/huggingface/candle.git", version = "0.9.1", features = [
-  "metal",
-] }
-candle-transformers = { git = "https://github.com/huggingface/candle.git", version = "0.9.1", features = [
-  "metal",
-] }
+candle-core = { version = "0.9.1" }
+candle-nn = { version = "0.9.1" }
 clap = { version = "4.5.40", features = ["derive"] }
 hf-hub = { version = "0.4.2", features = [
   "rustls-tls",
