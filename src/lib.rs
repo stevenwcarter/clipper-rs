@@ -2,8 +2,10 @@ use anyhow::Result;
 use candle_core::utils::{cuda_is_available, metal_is_available};
 use candle_core::{DType, Device, Tensor};
 use candle_nn::VarBuilder;
-use candle_transformers::models::clip;
 use tokenizers::Tokenizer;
+
+#[allow(unused)]
+mod clip;
 
 /// A CLIP model wrapper that provides easy access to image and text embeddings
 pub struct ClipEmbedder {
@@ -117,7 +119,7 @@ impl ClipEmbedder {
     pub fn get_image_embeddings(&self, image_paths: &[String]) -> Result<Vec<Vec<f32>>> {
         let images = load_images(image_paths, self.config.image_size)?.to_device(&self.device)?;
         let image_features = self.model.get_image_features(&images)?;
-        
+
         let mut embeddings = Vec::new();
         for i in 0..image_paths.len() {
             let embedding = image_features.get(i)?.to_vec1::<f32>()?;
@@ -134,7 +136,10 @@ impl ClipEmbedder {
     /// # Returns
     /// A vector of vectors, where each inner vector contains 512 floating point values
     /// representing the image embedding. The order matches the input images.
-    pub fn get_image_embeddings_from_dynamic(&self, images: Vec<image::DynamicImage>) -> Result<Vec<Vec<f32>>> {
+    pub fn get_image_embeddings_from_dynamic(
+        &self,
+        images: Vec<image::DynamicImage>,
+    ) -> Result<Vec<Vec<f32>>> {
         let mut tensors = Vec::new();
         for img in images {
             let tensor = preprocess_dynamic_image(img, self.config.image_size)?;
@@ -142,7 +147,7 @@ impl ClipEmbedder {
         }
         let batch_tensor = Tensor::stack(&tensors, 0)?.to_device(&self.device)?;
         let image_features = self.model.get_image_features(&batch_tensor)?;
-        
+
         let mut embeddings = Vec::new();
         for i in 0..tensors.len() {
             let embedding = image_features.get(i)?.to_vec1::<f32>()?;
@@ -159,7 +164,10 @@ impl ClipEmbedder {
     /// # Returns
     /// A vector of vectors, where each inner vector contains 512 floating point values
     /// representing the image embedding. The order matches the input byte arrays.
-    pub fn get_image_embeddings_from_bytes(&self, image_bytes_list: &[&[u8]]) -> Result<Vec<Vec<f32>>> {
+    pub fn get_image_embeddings_from_bytes(
+        &self,
+        image_bytes_list: &[&[u8]],
+    ) -> Result<Vec<Vec<f32>>> {
         let mut tensors = Vec::new();
         for image_bytes in image_bytes_list {
             let img = image::ImageReader::new(std::io::Cursor::new(image_bytes))
@@ -170,7 +178,7 @@ impl ClipEmbedder {
         }
         let batch_tensor = Tensor::stack(&tensors, 0)?.to_device(&self.device)?;
         let image_features = self.model.get_image_features(&batch_tensor)?;
-        
+
         let mut embeddings = Vec::new();
         for i in 0..tensors.len() {
             let embedding = image_features.get(i)?.to_vec1::<f32>()?;
