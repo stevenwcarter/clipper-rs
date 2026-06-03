@@ -15,3 +15,11 @@ hf-hub = { version = "0.4.2", features = [
 ], default-features = false }
 image = "0.25.6"
 tokenizers = { version = "0.21.1", features = ["rustls-tls"] }
+
+# Enable candle's Metal GPU backend only on macOS. The `metal` feature pulls in
+# the macOS-only `metal` crate, which does not build on Linux/Windows, so it must
+# not be enabled in the base `[dependencies]`. Cargo unifies features per target,
+# so on macOS candle-core/candle-nn gain `metal`; elsewhere this block is ignored.
+[target.'cfg(target_os = "macos")'.dependencies]
+candle-core = { version = "0.9.1", features = ["metal"] }
+candle-nn = { version = "0.9.1", features = ["metal"] }
