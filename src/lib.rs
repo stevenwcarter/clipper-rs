@@ -70,8 +70,10 @@ impl ClipEmbedder {
     /// tokenizer from HuggingFace (cached) on first use.
     pub fn from_model(name: &str, use_cpu: bool) -> Result<Self> {
         let spec = crate::catalog::find_spec(name).with_context(|| {
-            let known: Vec<_> =
-                crate::catalog::supported_models().into_iter().map(|m| m.name).collect();
+            let known: Vec<_> = crate::catalog::supported_models()
+                .into_iter()
+                .map(|m| m.name)
+                .collect();
             format!("unknown model '{name}'; supported models: {known:?}")
         })?;
         let device = get_device(use_cpu)?;
@@ -91,9 +93,8 @@ impl ClipEmbedder {
         let tokenizer = Tokenizer::from_file(tokenizer_file).map_err(anyhow::Error::msg)?;
 
         let config = (spec.config)();
-        let vb = unsafe {
-            VarBuilder::from_mmaped_safetensors(&[model_file], DType::F32, &device)?
-        };
+        let vb =
+            unsafe { VarBuilder::from_mmaped_safetensors(&[model_file], DType::F32, &device)? };
         let model = clip::ClipModel::new(vb, &config)?;
 
         Ok(ClipEmbedder {

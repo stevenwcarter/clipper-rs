@@ -55,7 +55,10 @@ pub(crate) fn find_spec(name: &str) -> Option<ModelSpec> {
 pub fn supported_models() -> Vec<ModelInfo> {
     specs()
         .into_iter()
-        .map(|s| ModelInfo { name: s.name.to_string(), dim: s.dim })
+        .map(|s| ModelInfo {
+            name: s.name.to_string(),
+            dim: s.dim,
+        })
         .collect()
 }
 

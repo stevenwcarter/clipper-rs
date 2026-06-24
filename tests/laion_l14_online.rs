@@ -10,11 +10,13 @@ fn cosine(a: &[f32], b: &[f32]) -> f32 {
 #[test]
 #[ignore = "downloads ~1.7GB LAION ViT-L/14 weights; run manually"]
 fn laion_l14_ranks_matching_caption_higher() {
-    let m = ClipEmbedder::from_model("laion/CLIP-ViT-L-14-laion2B-s32B-b82K", true)
-        .expect("load L/14");
+    let m =
+        ClipEmbedder::from_model("laion/CLIP-ViT-L-14-laion2B-s32B-b82K", true).expect("load L/14");
     assert_eq!(m.dim(), 768);
 
-    let img = m.get_image_embedding("assets/bike.jpg").expect("image embed");
+    let img = m
+        .get_image_embedding("assets/bike.jpg")
+        .expect("image embed");
     assert_eq!(img.len(), 768);
 
     let matching = m

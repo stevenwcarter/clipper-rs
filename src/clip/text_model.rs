@@ -6,7 +6,7 @@
 //! - [GH](https://github.com/openai/CLIP)
 //! - [Code](https://github.com/huggingface/transformers/tree/f6fa0f0bf0796ac66f201f23bdb8585de1609add/src/transformers/models/clip)
 
-use candle_core::{DType, Device, IndexOp, Result, Tensor, D};
+use candle_core::{D, DType, Device, IndexOp, Result, Tensor};
 use candle_nn as nn;
 use candle_nn::Module;
 
@@ -359,7 +359,11 @@ mod tests {
     fn gelu_matches_gelu_erf() {
         let d = Device::Cpu;
         let xs = Tensor::new(&[-2.0f32, -0.5, 0.0, 0.5, 2.0], &d).unwrap();
-        let got = Activation::Gelu.forward(&xs).unwrap().to_vec1::<f32>().unwrap();
+        let got = Activation::Gelu
+            .forward(&xs)
+            .unwrap()
+            .to_vec1::<f32>()
+            .unwrap();
         let want = xs.gelu_erf().unwrap().to_vec1::<f32>().unwrap();
         for (a, b) in got.iter().zip(want.iter()) {
             assert!((a - b).abs() < 1e-6, "got {a} want {b}");
@@ -370,8 +374,19 @@ mod tests {
     fn gelu_differs_from_quickgelu() {
         let d = Device::Cpu;
         let xs = Tensor::new(&[1.5f32], &d).unwrap();
-        let g = Activation::Gelu.forward(&xs).unwrap().to_vec1::<f32>().unwrap()[0];
-        let q = Activation::QuickGelu.forward(&xs).unwrap().to_vec1::<f32>().unwrap()[0];
-        assert!((g - q).abs() > 1e-4, "gelu {g} should differ from quickgelu {q}");
+        let g = Activation::Gelu
+            .forward(&xs)
+            .unwrap()
+            .to_vec1::<f32>()
+            .unwrap()[0];
+        let q = Activation::QuickGelu
+            .forward(&xs)
+            .unwrap()
+            .to_vec1::<f32>()
+            .unwrap()[0];
+        assert!(
+            (g - q).abs() > 1e-4,
+            "gelu {g} should differ from quickgelu {q}"
+        );
     }
 }
